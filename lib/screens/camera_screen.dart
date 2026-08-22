@@ -1,0 +1,427 @@
+import 'dart:async';
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:camera/camera.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:sensors_plus/sensors_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
+import 'package:intl/intl.dart';
+import 'dart:math' as math;
+
+class CameraScreen extends StatefulWidget {
+  const CameraScreen({super.key});
+
+  @override
+  State<CameraScreen> createState() => _CameraScreenState();
+}
+
+class _CameraScreenState extends State<CameraScreen> {
+  CameraController? _controller;
+  List<CameraDescription>? _cameras;
+  String? _projectName;
+  Position? _currentPosition;
+  double? _compassDirection;
+  StreamSubscription<Position>? _positionSubscription;
+  StreamSubscription<MagnetometerEvent>? _magnetometerSubscription;
+  List<double>? _magnetometerValues;
+  bool _isInitialized = false;
+  double _zoomLevel = 1.0;
+  double _minZoomLevel = 1.0;
+  double _maxZoomLevel = 1.0;
+  FlashMode _flashMode = FlashMode.off;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeCamera();
+    _loadProjectName();
+    _startLocationUpdates();
+    _startCompassUpdates();
+  }
+
+  Future<void> _initializeCamera() async {
+    try {
+      _cameras = await availableCameras();
+      if (_cameras != null && _cameras!.isNotEmpty) {
+        _controller = CameraController(
+          _cameras![0],
+          ResolutionPreset.high,
+          enableAudio: false,
+        );
+
+        await _controller!.initialize();
+        
+        // Get zoom levels
+        _maxZoomLevel = await _controller!.getMaxZoomLevel();
+        _minZoomLevel = await _controller!.getMinZoomLevel();
+
+        if (mounted) {
+          setState(() {
+            _isInitialized = true;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error initializing camera: $e');
+    }
+  }
+
+  Future<void> _loadProjectName() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _projectName = prefs.getString('project_name') ?? 'Default Project';
+    });
+  }
+
+  void _startLocationUpdates() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      // Location service is not enabled, request user to enable it
+      return;
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        // Permissions are denied
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      // Permissions are denied forever
+      return;
+    }
+
+    const locationSettings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 10,
+    );
+
+    _positionSubscription = Geolocator.getPositionStream(locationSettings: locationSettings)
+        .listen((Position position) {
+      if (mounted) {
+        setState(() {
+          _currentPosition = position;
+        });
+      }
+    }, onError: (error) {
+      print('Location error: $error');
+    });
+  }
+
+  void _startCompassUpdates() {
+    _magnetometerSubscription = magnetometerEventStream().listen((MagnetometerEvent event) {
+      if (mounted) {
+        setState(() {
+          _magnetometerValues = [event.x, event.y, event.z];
+          _compassDirection = _calculateCompassDirection();
+        });
+      }
+    });
+  }
+
+  double? _calculateCompassDirection() {
+    if (_magnetometerValues == null || _magnetometerValues!.length < 3) return null;
+    
+    final x = _magnetometerValues![0];
+    final y = _magnetometerValues![1];
+    
+    // Calculate heading from magnetometer data
+    var heading = math.atan2(y, x) * (180 / math.pi);
+    
+    // Normalize to 0-360
+    if (heading < 0) {
+      heading += 360;
+    }
+    
+    return heading;
+  }
+
+  String _formatCoordinates(Position? position) {
+    if (position == null) return 'GPS: N/A';
+    return '${position.latitude.toStringAsFixed(6)}°, ${position.longitude.toStringAsFixed(6)}°';
+  }
+
+  String _formatCompassDirection(double? direction) {
+    if (direction == null) return 'N/A';
+    
+    String cardinal = '';
+    final degrees = direction % 360;
+    
+    if (degrees >= 337.5 || degrees < 22.5) {
+      cardinal = 'N';
+    } else if (degrees >= 22.5 && degrees < 67.5) {
+      cardinal = 'NE';
+    } else if (degrees >= 67.5 && degrees < 112.5) {
+      cardinal = 'E';
+    } else if (degrees >= 112.5 && degrees < 157.5) {
+      cardinal = 'SE';
+    } else if (degrees >= 157.5 && degrees < 202.5) {
+      cardinal = 'S';
+    } else if (degrees >= 202.5 && degrees < 247.5) {
+      cardinal = 'SW';
+    } else if (degrees >= 247.5 && degrees < 292.5) {
+      cardinal = 'W';
+    } else if (degrees >= 292.5 && degrees < 337.5) {
+      cardinal = 'NW';
+    }
+    
+    return '${degrees.toStringAsFixed(0)}° $cardinal';
+  }
+
+  String _formatDateTime() {
+    final now = DateTime.now();
+    return DateFormat('MMM d, yyyy h:mm a').format(now);
+  }
+
+  Future<void> _takePicture() async {
+    if (_controller == null || !_controller!.value.isInitialized) return;
+
+    try {
+      final image = await _controller!.takePicture();
+      
+      // Add annotations to the image
+      final annotatedImage = await _addAnnotationsToImage(image.path);
+      
+      // Save to app's external storage directory
+      final directory = await getExternalStorageDirectory();
+      if (directory == null) {
+        throw Exception('External storage directory not available');
+      }
+      
+      final appDir = Directory(directory.path);
+      if (!await appDir.exists()) {
+        await appDir.create(recursive: true);
+      }
+      
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'field_inspector_$timestamp.jpg';
+      final savedPath = '${directory.path}/$fileName';
+      
+      await File(annotatedImage.path).copy(savedPath);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Photo saved to $savedPath')),
+        );
+      }
+    } catch (e) {
+      print('Error taking picture: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving photo: $e')),
+        );
+      }
+    }
+  }
+
+  Future<File> _addAnnotationsToImage(String imagePath) async {
+    // For now, return the original image without embedded annotations
+    // The annotations are shown in the camera overlay when taking the picture
+    // Future enhancement: Use a proper image processing library to embed text
+    return File(imagePath);
+  }
+
+  void _switchCamera() async {
+    if (_cameras == null || _cameras!.length < 2) return;
+    
+    final currentCameraIndex = _cameras!.indexOf(_controller!.description);
+    final newCameraIndex = (currentCameraIndex + 1) % _cameras!.length;
+    
+    await _controller!.dispose();
+    
+    _controller = CameraController(
+      _cameras![newCameraIndex],
+      ResolutionPreset.high,
+      enableAudio: false,
+    );
+
+    await _controller!.initialize();
+    
+    _maxZoomLevel = await _controller!.getMaxZoomLevel();
+    _minZoomLevel = await _controller!.getMinZoomLevel();
+    _zoomLevel = 1.0;
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _toggleFlash() async {
+    if (_controller == null) return;
+    
+    FlashMode newFlashMode;
+    switch (_flashMode) {
+      case FlashMode.off:
+        newFlashMode = FlashMode.auto;
+        break;
+      case FlashMode.auto:
+        newFlashMode = FlashMode.always;
+        break;
+      case FlashMode.always:
+        newFlashMode = FlashMode.off;
+        break;
+      default:
+        newFlashMode = FlashMode.off;
+    }
+    
+    await _controller!.setFlashMode(newFlashMode);
+    
+    if (mounted) {
+      setState(() {
+        _flashMode = newFlashMode;
+      });
+    }
+  }
+
+  void _handleZoomScale(double scale) {
+    if (_controller == null) return;
+    
+    setState(() {
+      _zoomLevel = (_zoomLevel * scale).clamp(_minZoomLevel, _maxZoomLevel);
+    });
+    
+    _controller!.setZoomLevel(_zoomLevel);
+  }
+
+  @override
+  void dispose() {
+    _positionSubscription?.cancel();
+    _magnetometerSubscription?.cancel();
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _isInitialized && _controller != null
+          ? Stack(
+              children: [
+                // Camera preview
+                GestureDetector(
+                  onScaleStart: (_) {},
+                  onScaleUpdate: (details) {
+                    _handleZoomScale(details.scale);
+                  },
+                  child: CameraPreview(_controller!),
+                ),
+                
+                // Annotations overlay - single row at bottom
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 100,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Left side: Project name, date/time, GPS
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _projectName ?? 'Default Project',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.normal,
+                              ),
+                            ),
+                            Text(
+                              _formatDateTime(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.normal,
+                              ),
+                            ),
+                            Text(
+                              _formatCoordinates(_currentPosition),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.normal,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Right side: Compass direction
+                      Text(
+                        _formatCompassDirection(_compassDirection),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Camera controls
+                Positioned(
+                  bottom: 16,
+                  left: 0,
+                  right: 0,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      IconButton(
+                        icon: Icon(_getFlashIcon()),
+                        onPressed: _toggleFlash,
+                        color: Colors.white,
+                      ),
+                      GestureDetector(
+                        onTap: _takePicture,
+                        child: Container(
+                          width: 70,
+                          height: 70,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 4),
+                          ),
+                          child: Container(
+                            margin: const EdgeInsets.all(8),
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.flip_camera_ios),
+                        onPressed: _switchCamera,
+                        color: Colors.white,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          : const Center(
+              child: CircularProgressIndicator(),
+            ),
+    );
+  }
+
+  IconData _getFlashIcon() {
+    switch (_flashMode) {
+      case FlashMode.off:
+        return Icons.flash_off;
+      case FlashMode.auto:
+        return Icons.flash_auto;
+      case FlashMode.always:
+        return Icons.flash_on;
+      default:
+        return Icons.flash_off;
+    }
+  }
+}

@@ -1,0 +1,13 @@
+# This file tracks properties of this Flutter project.
+version:
+  revision: "8f051c40df3e183fe3f247f387c88e4b0a9b1b7e"
+  channel: "stable"
+
+project_type: app
+
+# Tracks metadata for the flutter migrate command
+migration:
+  platforms:
+    - platform: root
+      create_revision: 8f051c40df3e183fe3f247f387c88e4b0a9b1b7e
+      base_revision: 8f051c40df3e183fe3f247f387c88e4b0a9b1b7e
