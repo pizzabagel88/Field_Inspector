@@ -6,9 +6,10 @@ import 'package:geolocator/geolocator.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
 import 'package:intl/intl.dart';
 import 'dart:math' as math;
+
+import '../models/annotation_settings.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -21,6 +22,10 @@ class _CameraScreenState extends State<CameraScreen> {
   CameraController? _controller;
   List<CameraDescription>? _cameras;
   String? _projectName;
+  String _inspectorName = '';
+  String _customNote = '';
+  int _photoSequence = 1;
+  List<AnnotationItem> _annotationItems = List.of(AnnotationSettings.defaults);
   Position? _currentPosition;
   double? _compassDirection;
   StreamSubscription<Position>? _positionSubscription;
@@ -36,7 +41,7 @@ class _CameraScreenState extends State<CameraScreen> {
   void initState() {
     super.initState();
     _initializeCamera();
-    _loadProjectName();
+    _loadSettings();
     _startLocationUpdates();
     _startCompassUpdates();
   }
@@ -52,7 +57,7 @@ class _CameraScreenState extends State<CameraScreen> {
         );
 
         await _controller!.initialize();
-        
+
         // Get zoom levels
         _maxZoomLevel = await _controller!.getMaxZoomLevel();
         _minZoomLevel = await _controller!.getMinZoomLevel();
@@ -68,10 +73,16 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  Future<void> _loadProjectName() async {
+  Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    final annotationSettings = await AnnotationSettings.load(prefs);
+    if (!mounted) return;
     setState(() {
       _projectName = prefs.getString('project_name') ?? 'Default Project';
+      _inspectorName = prefs.getString('inspector_name') ?? '';
+      _customNote = prefs.getString('custom_note') ?? '';
+      _photoSequence = prefs.getInt('photo_sequence') ?? 1;
+      _annotationItems = annotationSettings.items;
     });
   }
 
@@ -101,8 +112,9 @@ class _CameraScreenState extends State<CameraScreen> {
       distanceFilter: 10,
     );
 
-    _positionSubscription = Geolocator.getPositionStream(locationSettings: locationSettings)
-        .listen((Position position) {
+    _positionSubscription =
+        Geolocator.getPositionStream(locationSettings: locationSettings).listen(
+            (Position position) {
       if (mounted) {
         setState(() {
           _currentPosition = position;
@@ -114,7 +126,8 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   void _startCompassUpdates() {
-    _magnetometerSubscription = magnetometerEventStream().listen((MagnetometerEvent event) {
+    _magnetometerSubscription =
+        magnetometerEventStream().listen((MagnetometerEvent event) {
       if (mounted) {
         setState(() {
           _magnetometerValues = [event.x, event.y, event.z];
@@ -125,19 +138,21 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   double? _calculateCompassDirection() {
-    if (_magnetometerValues == null || _magnetometerValues!.length < 3) return null;
-    
+    if (_magnetometerValues == null || _magnetometerValues!.length < 3) {
+      return null;
+    }
+
     final x = _magnetometerValues![0];
     final y = _magnetometerValues![1];
-    
+
     // Calculate heading from magnetometer data
     var heading = math.atan2(y, x) * (180 / math.pi);
-    
+
     // Normalize to 0-360
     if (heading < 0) {
       heading += 360;
     }
-    
+
     return heading;
   }
 
@@ -148,10 +163,10 @@ class _CameraScreenState extends State<CameraScreen> {
 
   String _formatCompassDirection(double? direction) {
     if (direction == null) return 'N/A';
-    
+
     String cardinal = '';
     final degrees = direction % 360;
-    
+
     if (degrees >= 337.5 || degrees < 22.5) {
       cardinal = 'N';
     } else if (degrees >= 22.5 && degrees < 67.5) {
@@ -169,7 +184,7 @@ class _CameraScreenState extends State<CameraScreen> {
     } else if (degrees >= 292.5 && degrees < 337.5) {
       cardinal = 'NW';
     }
-    
+
     return '${degrees.toStringAsFixed(0)}° $cardinal';
   }
 
@@ -178,33 +193,100 @@ class _CameraScreenState extends State<CameraScreen> {
     return DateFormat('MMM d, yyyy h:mm a').format(now);
   }
 
+  String _formatElevation(Position? position) {
+    if (position == null) return 'Elevation: N/A';
+    return 'Elevation: ${position.altitude.toStringAsFixed(1)} m';
+  }
+
+  String _annotationText(String id) {
+    switch (id) {
+      case 'project_name':
+        final projectName = _projectName?.trim() ?? '';
+        return projectName.isEmpty ? 'Default Project' : projectName;
+      case 'date_time':
+        return _formatDateTime();
+      case 'coordinates':
+        return _formatCoordinates(_currentPosition);
+      case 'compass':
+        return _formatCompassDirection(_compassDirection);
+      case 'elevation':
+        return _formatElevation(_currentPosition);
+      case 'inspector_name':
+        return _inspectorName.isEmpty
+            ? 'Inspector: N/A'
+            : 'Inspector: $_inspectorName';
+      case 'custom_note':
+        return _customNote.isEmpty ? 'Note: N/A' : 'Note: $_customNote';
+      case 'photo_sequence':
+        return 'Photo #${_photoSequence.toString().padLeft(4, '0')}';
+      default:
+        return '';
+    }
+  }
+
+  Widget _buildAnnotationColumn(AnnotationPlacement placement) {
+    final items =
+        _annotationItems.where((item) => item.placement == placement).toList();
+
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: placement == AnnotationPlacement.left
+            ? CrossAxisAlignment.start
+            : CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: items
+            .map(
+              (item) => Text(
+                _annotationText(item.id),
+                textAlign: placement == AnnotationPlacement.left
+                    ? TextAlign.left
+                    : TextAlign.right,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.normal,
+                ),
+              ),
+            )
+            .toList(),
+      ),
+    );
+  }
+
   Future<void> _takePicture() async {
     if (_controller == null || !_controller!.value.isInitialized) return;
 
     try {
       final image = await _controller!.takePicture();
-      
+
       // Add annotations to the image
       final annotatedImage = await _addAnnotationsToImage(image.path);
-      
+
       // Save to app's external storage directory
       final directory = await getExternalStorageDirectory();
       if (directory == null) {
         throw Exception('External storage directory not available');
       }
-      
+
       final appDir = Directory(directory.path);
       if (!await appDir.exists()) {
         await appDir.create(recursive: true);
       }
-      
+
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final fileName = 'field_inspector_$timestamp.jpg';
       final savedPath = '${directory.path}/$fileName';
-      
+
       await File(annotatedImage.path).copy(savedPath);
-      
+
+      final preferences = await SharedPreferences.getInstance();
+      final nextSequence = _photoSequence + 1;
+      await preferences.setInt('photo_sequence', nextSequence);
+
       if (mounted) {
+        setState(() {
+          _photoSequence = nextSequence;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Photo saved to $savedPath')),
         );
@@ -228,12 +310,12 @@ class _CameraScreenState extends State<CameraScreen> {
 
   void _switchCamera() async {
     if (_cameras == null || _cameras!.length < 2) return;
-    
+
     final currentCameraIndex = _cameras!.indexOf(_controller!.description);
     final newCameraIndex = (currentCameraIndex + 1) % _cameras!.length;
-    
+
     await _controller!.dispose();
-    
+
     _controller = CameraController(
       _cameras![newCameraIndex],
       ResolutionPreset.high,
@@ -241,7 +323,7 @@ class _CameraScreenState extends State<CameraScreen> {
     );
 
     await _controller!.initialize();
-    
+
     _maxZoomLevel = await _controller!.getMaxZoomLevel();
     _minZoomLevel = await _controller!.getMinZoomLevel();
     _zoomLevel = 1.0;
@@ -253,7 +335,7 @@ class _CameraScreenState extends State<CameraScreen> {
 
   void _toggleFlash() async {
     if (_controller == null) return;
-    
+
     FlashMode newFlashMode;
     switch (_flashMode) {
       case FlashMode.off:
@@ -268,9 +350,9 @@ class _CameraScreenState extends State<CameraScreen> {
       default:
         newFlashMode = FlashMode.off;
     }
-    
+
     await _controller!.setFlashMode(newFlashMode);
-    
+
     if (mounted) {
       setState(() {
         _flashMode = newFlashMode;
@@ -280,11 +362,11 @@ class _CameraScreenState extends State<CameraScreen> {
 
   void _handleZoomScale(double scale) {
     if (_controller == null) return;
-    
+
     setState(() {
       _zoomLevel = (_zoomLevel * scale).clamp(_minZoomLevel, _maxZoomLevel);
     });
-    
+
     _controller!.setZoomLevel(_zoomLevel);
   }
 
@@ -310,61 +392,21 @@ class _CameraScreenState extends State<CameraScreen> {
                   },
                   child: CameraPreview(_controller!),
                 ),
-                
+
                 // Annotations overlay - single row at bottom
                 Positioned(
                   left: 16,
                   right: 16,
                   bottom: 100,
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Left side: Project name, date/time, GPS
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _projectName ?? 'Default Project',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.normal,
-                              ),
-                            ),
-                            Text(
-                              _formatDateTime(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.normal,
-                              ),
-                            ),
-                            Text(
-                              _formatCoordinates(_currentPosition),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.normal,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Right side: Compass direction
-                      Text(
-                        _formatCompassDirection(_compassDirection),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.normal,
-                        ),
-                      ),
+                      _buildAnnotationColumn(AnnotationPlacement.left),
+                      const SizedBox(width: 16),
+                      _buildAnnotationColumn(AnnotationPlacement.right),
                     ],
                   ),
                 ),
-                
+
                 // Camera controls
                 Positioned(
                   bottom: 16,
