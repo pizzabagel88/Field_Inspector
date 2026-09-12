@@ -1,15 +1,22 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
 import 'dart:math' as math;
 
 import '../models/annotation_settings.dart';
+
+class _AnnotationValue {
+  final String text;
+  final AnnotationPlacement placement;
+
+  _AnnotationValue({required this.text, required this.placement});
+}
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -36,6 +43,7 @@ class _CameraScreenState extends State<CameraScreen> {
   double _minZoomLevel = 1.0;
   double _maxZoomLevel = 1.0;
   FlashMode _flashMode = FlashMode.off;
+  static const platform = MethodChannel('com.example.field_inspector/gallery');
 
   @override
   void initState() {
@@ -70,6 +78,11 @@ class _CameraScreenState extends State<CameraScreen> {
       }
     } catch (e) {
       print('Error initializing camera: $e');
+      if (mounted) {
+        setState(() {
+          _isInitialized = false;
+        });
+      }
     }
   }
 
@@ -89,7 +102,6 @@ class _CameraScreenState extends State<CameraScreen> {
   void _startLocationUpdates() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      // Location service is not enabled, request user to enable it
       return;
     }
 
@@ -97,13 +109,11 @@ class _CameraScreenState extends State<CameraScreen> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        // Permissions are denied
         return;
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
-      // Permissions are denied forever
       return;
     }
 
@@ -224,6 +234,16 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
+  List<_AnnotationValue> _getAnnotationValues() {
+    return _annotationItems
+        .where((item) => item.placement != AnnotationPlacement.disabled)
+        .map((item) => _AnnotationValue(
+              text: _annotationText(item.id),
+              placement: item.placement,
+            ))
+        .toList();
+  }
+
   Widget _buildAnnotationColumn(AnnotationPlacement placement) {
     final items =
         _annotationItems.where((item) => item.placement == placement).toList();
@@ -262,22 +282,8 @@ class _CameraScreenState extends State<CameraScreen> {
       // Add annotations to the image
       final annotatedImage = await _addAnnotationsToImage(image.path);
 
-      // Save to app's external storage directory
-      final directory = await getExternalStorageDirectory();
-      if (directory == null) {
-        throw Exception('External storage directory not available');
-      }
-
-      final appDir = Directory(directory.path);
-      if (!await appDir.exists()) {
-        await appDir.create(recursive: true);
-      }
-
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = 'field_inspector_$timestamp.jpg';
-      final savedPath = '${directory.path}/$fileName';
-
-      await File(annotatedImage.path).copy(savedPath);
+      // Save to device Pictures directory (accessible by gallery)
+      await _saveToGallery(annotatedImage.path);
 
       final preferences = await SharedPreferences.getInstance();
       final nextSequence = _photoSequence + 1;
@@ -288,7 +294,7 @@ class _CameraScreenState extends State<CameraScreen> {
           _photoSequence = nextSequence;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Photo saved to $savedPath')),
+          const SnackBar(content: Text('Photo saved to gallery')),
         );
       }
     } catch (e) {
@@ -301,10 +307,48 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
+  Future<void> _saveToGallery(String imagePath) async {
+    try {
+      // Get annotation values to embed in the image
+      final annotations = _getAnnotationValues().map((a) => {
+        'text': a.text,
+        'placement': a.placement.toString().split('.').last,
+      }).toList();
+
+      // Use Android MediaStore to properly save to gallery with annotations
+      final String? savedPath = await platform.invokeMethod('saveToGallery', {
+        'imagePath': imagePath,
+        'annotations': annotations,
+      });
+      
+      if (savedPath == null) {
+        throw Exception('Failed to save image to gallery');
+      }
+      
+      print('Image saved to gallery: $savedPath');
+    } catch (e) {
+      print('Error saving to gallery: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _openGallery() async {
+    try {
+      // Use native Android intent to open gallery in viewing mode
+      await platform.invokeMethod('openGallery');
+    } catch (e) {
+      print('Error opening gallery: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error opening gallery: $e')),
+        );
+      }
+    }
+  }
+
   Future<File> _addAnnotationsToImage(String imagePath) async {
-    // For now, return the original image without embedded annotations
-    // The annotations are shown in the camera overlay when taking the picture
-    // Future enhancement: Use a proper image processing library to embed text
+    // Annotations are now embedded in the native Android code
+    // This function is kept for compatibility but does nothing
     return File(imagePath);
   }
 
@@ -412,44 +456,94 @@ class _CameraScreenState extends State<CameraScreen> {
                   bottom: 16,
                   left: 0,
                   right: 0,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      IconButton(
-                        icon: Icon(_getFlashIcon()),
-                        onPressed: _toggleFlash,
-                        color: Colors.white,
-                      ),
-                      GestureDetector(
-                        onTap: _takePicture,
-                        child: Container(
-                          width: 70,
-                          height: 70,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 4),
-                          ),
-                          child: Container(
-                            margin: const EdgeInsets.all(8),
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white,
-                            ),
+                  child: SizedBox(
+                    height: 80,
+                    child: Stack(
+                      children: [
+                        // Flash button - left side
+                        Positioned(
+                          left: 32,
+                          top: 20,
+                          child: IconButton(
+                            icon: Icon(_getFlashIcon()),
+                            onPressed: _toggleFlash,
+                            color: Colors.white,
+                            iconSize: 32,
                           ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.flip_camera_ios),
-                        onPressed: _switchCamera,
-                        color: Colors.white,
-                      ),
-                    ],
+                        // Camera switch button - right side
+                        Positioned(
+                          right: 32,
+                          top: 20,
+                          child: IconButton(
+                            icon: const Icon(Icons.flip_camera_ios),
+                            onPressed: _switchCamera,
+                            color: Colors.white,
+                            iconSize: 32,
+                          ),
+                        ),
+                        // Center row with gallery and shutter
+                        Center(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Gallery button
+                              GestureDetector(
+                                onTap: _openGallery,
+                                child: Container(
+                                  width: 56,
+                                  height: 56,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 2),
+                                    color: Colors.transparent,
+                                  ),
+                                  child: const Icon(
+                                    Icons.photo_library,
+                                    color: Colors.white,
+                                    size: 28,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 24),
+                              // Shutter button - centered
+                              GestureDetector(
+                                onTap: _takePicture,
+                                child: Container(
+                                  width: 70,
+                                  height: 70,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 4),
+                                    color: Colors.transparent,
+                                  ),
+                                  child: Container(
+                                    margin: const EdgeInsets.all(8),
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
             )
           : const Center(
-              child: CircularProgressIndicator(),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Initializing camera...'),
+                ],
+              ),
             ),
     );
   }
