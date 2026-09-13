@@ -7,8 +7,10 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.media.ExifInterface
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -57,12 +59,15 @@ class MainActivity: FlutterActivity() {
                 return null
             }
 
-            // Load and annotate the image
+            // Load the image with proper orientation handling
             val bitmap = BitmapFactory.decodeFile(imagePath)
+            val orientedBitmap = fixBitmapOrientation(imagePath, bitmap)
+            
+            // Add annotations if provided
             val annotatedBitmap = if (annotations != null && annotations.isNotEmpty()) {
-                addAnnotationsToBitmap(bitmap, annotations)
+                addAnnotationsToBitmap(orientedBitmap, annotations)
             } else {
-                bitmap
+                orientedBitmap
             }
 
             // Save to temporary file
@@ -103,6 +108,52 @@ class MainActivity: FlutterActivity() {
         } catch (e: Exception) {
             e.printStackTrace()
             null
+        }
+    }
+
+    private fun fixBitmapOrientation(imagePath: String, bitmap: Bitmap): Bitmap {
+        return try {
+            val exif = ExifInterface(imagePath)
+            val orientation = exif.getAttributeInt(
+                ExifInterface.TAG_ORIENTATION,
+                ExifInterface.ORIENTATION_NORMAL
+            )
+
+            val matrix = Matrix()
+            when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+                ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+                ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+                ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> {
+                    matrix.postScale(-1f, 1f)
+                }
+                ExifInterface.ORIENTATION_FLIP_VERTICAL -> {
+                    matrix.postScale(1f, -1f)
+                }
+                ExifInterface.ORIENTATION_TRANSPOSE -> {
+                    matrix.postRotate(270f)
+                    matrix.postScale(-1f, 1f)
+                }
+                ExifInterface.ORIENTATION_TRANSVERSE -> {
+                    matrix.postRotate(90f)
+                    matrix.postScale(-1f, 1f)
+                }
+                else -> return bitmap
+            }
+
+            val rotatedBitmap = Bitmap.createBitmap(
+                bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
+            )
+            
+            // Recycle the original bitmap if we created a new one
+            if (rotatedBitmap != bitmap) {
+                bitmap.recycle()
+            }
+            
+            rotatedBitmap
+        } catch (e: Exception) {
+            e.printStackTrace()
+            bitmap
         }
     }
 
