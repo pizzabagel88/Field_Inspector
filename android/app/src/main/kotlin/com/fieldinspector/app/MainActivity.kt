@@ -1,4 +1,4 @@
-package com.example.field_inspector
+package com.fieldinspector.app
 
 import android.content.ContentValues
 import android.content.Context

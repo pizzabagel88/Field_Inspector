@@ -94,8 +94,40 @@ The AAB will be located at `build/app/outputs/bundle/release/app-release.aab`
 
 **Note**: Before building for release, ensure you have:
 - Updated the version number in `pubspec.yaml`
-- Configured signing keys for the Play Store
+- Configured signing keys for the Play Store (see below)
 - Updated app icons and launcher assets
+- Generated keystore and configured `android/key.properties`
+
+### App Signing Configuration
+
+This project is configured for Play Store release signing:
+
+1. **Generate Keystore**:
+   ```bash
+   cd android
+   keytool -genkey -v -keystore field-inspector-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias field-inspector
+   ```
+   - Enter a strong password when prompted
+   - Fill in certificate information
+   - Use the same password for key password
+
+2. **Configure Signing**:
+   - Edit `android/key.properties` (template provided)
+   - Fill in your keystore password, key password, and alias
+   - Place your keystore file in the `android/` directory
+
+3. **Important Security Notes**:
+   - **NEVER** commit `key.properties` or your keystore to git
+   - These files are already in `.gitignore`
+   - Keep your keystore file secure and backed up
+   - If you lose your keystore, you cannot update your app
+
+4. **Package Name**:
+   - Current package: `com.fieldinspector.app`
+   - Update in `android/app/build.gradle` if needed
+   - Also update MainActivity.kt package declaration
+
+For detailed Play Store submission instructions, see `STORE_LISTING.md`.
 
 ## 📱 Usage
 
@@ -146,9 +178,10 @@ Permissions are requested at runtime and must be granted for full functionality.
 - **Framework**: Flutter 3.47.1
 - **Language**: Dart 3.13.1
 - **Target SDK**: Android 16 (API 36)
-- **Min SDK**: Android 8.0 (API 24)
+- **Min SDK**: Android 8.0 (API 26)
 - **Build Tools**: Gradle 8.14.0, AGP 8.11.1, Kotlin 2.2.20
 - **Architecture**: Clean Architecture with separation of concerns
+- **Package Name**: com.fieldinspector.app
 
 ### Key Dependencies
 
@@ -174,10 +207,12 @@ lib/
 android/
 ├── app/
 │   └── src/main/
-│       ├── kotlin/com/example/field_inspector/
+│       ├── kotlin/com/fieldinspector/app/
 │       │   └── MainActivity.kt  # Native Android code for gallery/annotations
 │       └── AndroidManifest.xml  # Permissions and app configuration
-└── build.gradle              # Android build configuration
+├── key.properties          # Signing configuration (not in git)
+├── build.gradle            # Android build configuration
+└── field-inspector-key.jks # Keystore file (not in git)
 ```
 
 ### Development Commands
@@ -286,28 +321,36 @@ This app:
 
 ### Google Play Store
 
-Before deploying to the Play Store:
+Complete Play Store submission instructions are available in `STORE_LISTING.md`, which includes:
 
-1. **Update app metadata**:
-   - App name and description
-   - Screenshots and promotional graphics
-   - Privacy policy URL
-   - Content rating
+- Store listing template with descriptions
+- Screenshot requirements
+- Icon and graphics specifications
+- Privacy policy guidelines
+- Content rating information
+- Testing checklist
+- Submission checklist
 
-2. **Configure signing**:
-   - Generate signing key
+**Quick Start**:
+
+1. **Configure signing**:
+   - Generate signing key (see instructions above)
    - Configure `android/key.properties`
    - Update `android/app/build.gradle` with signing config
 
-3. **Testing**:
-   - Test on multiple Android versions
-   - Test on different screen sizes
-   - Verify all permissions work correctly
-   - Test in-app purchases (if any)
+2. **Build release APK**:
+   ```bash
+   flutter build apk --release
+   ```
+
+3. **Complete store listing**:
+   - Use `STORE_LISTING.md` as a template
+   - Create screenshots and graphics
+   - Write privacy policy
+   - Upload to Google Play Console
 
 4. **Submit**:
-   - Create AAB file: `flutter build appbundle --release`
-   - Upload to Google Play Console
+   - Upload APK or AAB to Google Play Console
    - Complete store listing
    - Submit for review
 
