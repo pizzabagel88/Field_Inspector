@@ -43,7 +43,7 @@ android {
 
     defaultConfig {
         applicationId "com.example.field_inspector"
-        minSdk 36
+        minSdk 26
         targetSdk 36
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName

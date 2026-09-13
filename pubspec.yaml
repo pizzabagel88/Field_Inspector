@@ -1,5 +1,5 @@
 name: field_inspector
-description: A camera app with GPS, compass, and annotation capabilities similar to Conota Camera.
+description: Professional field inspection camera app with GPS, compass, and embedded annotations for documentation and project tracking.
 publish_to: 'none'
 version: 1.0.0+1
 
