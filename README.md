@@ -50,7 +50,7 @@ A professional Flutter camera app designed for field work and documentation. Ins
 - **Android SDK**: API 36 (Android 16) or higher
 - **Android Studio** (for Android development)
 - **A physical Android device or emulator**
-- **Minimum Android Version**: Android 8.0 (API 24)
+- **Minimum Android Version**: Android 8.0 (API 26)
 
 ### Installation
 
@@ -112,7 +112,7 @@ This project is configured for Play Store release signing:
    - Use the same password for key password
 
 2. **Configure Signing**:
-   - Edit `android/key.properties` (template provided)
+   - Edit `android/key.properties`
    - Fill in your keystore password, key password, and alias
    - Place your keystore file in the `android/` directory
 
@@ -120,14 +120,14 @@ This project is configured for Play Store release signing:
    - **NEVER** commit `key.properties` or your keystore to git
    - These files are already in `.gitignore`
    - Keep your keystore file secure and backed up
-   - If you lose your keystore, you cannot update your app
+   - Back up your upload keystore and credentials securely. Google Play can reset an upload key after verification, but you should not rely on recovery.
 
 4. **Package Name**:
    - Current package: `com.fieldinspector.app`
    - Update in `android/app/build.gradle` if needed
    - Also update MainActivity.kt package declaration
 
-For detailed Play Store submission instructions, see `STORE_LISTING.md`.
+For the current release checklist, see `PLAY_RELEASE.md`. `STORE_LISTING.md` contains draft marketing copy.
 
 ## 📱 Usage
 
@@ -165,11 +165,9 @@ The app requires the following Android permissions:
 - **CAMERA**: To capture photos and access camera hardware
 - **ACCESS_FINE_LOCATION**: To get precise GPS coordinates
 - **ACCESS_COARSE_LOCATION**: To get approximate location when precise location unavailable
-- **READ_EXTERNAL_STORAGE**: To access device gallery (legacy Android versions)
-- **WRITE_EXTERNAL_STORAGE**: To save photos to device storage (legacy Android versions)
-- **READ_MEDIA_IMAGES**: To access gallery images (Android 13+)
+- Photos are saved through Android MediaStore without requesting broad photo-library access.
 
-Permissions are requested at runtime and must be granted for full functionality. The app gracefully handles permission denials with appropriate user feedback.
+Camera permission is requested by the camera feature. Optional foreground location permission is requested when GPS coordinates or elevation are enabled. The app can be used without location.
 
 ## 🛠️ Development
 
@@ -191,7 +189,7 @@ Permissions are requested at runtime and must be granted for full functionality.
 - `permission_handler`: Runtime permission management
 - `shared_preferences`: Persistent settings storage
 - `intl`: Date/time formatting
-- `image_picker`: Gallery access
+- No broad photo-library picker or storage-permission dependency is needed for the current gallery workflow.
 
 ### Project Structure
 
@@ -225,7 +223,7 @@ flutter analyze
 flutter test
 
 # Format code
-flutter format .
+dart format .
 
 # Clean build files
 flutter clean
@@ -321,7 +319,7 @@ This app:
 
 ### Google Play Store
 
-Complete Play Store submission instructions are available in `STORE_LISTING.md`, which includes:
+Complete Play Store preparation instructions are available in `PLAY_RELEASE.md`. `STORE_LISTING.md` provides draft descriptions and listing notes.
 
 - Store listing template with descriptions
 - Screenshot requirements
@@ -338,9 +336,9 @@ Complete Play Store submission instructions are available in `STORE_LISTING.md`,
    - Configure `android/key.properties`
    - Update `android/app/build.gradle` with signing config
 
-2. **Build release APK**:
+2. **Build release AAB**:
    ```bash
-   flutter build apk --release
+   flutter build appbundle --release
    ```
 
 3. **Complete store listing**:
@@ -350,7 +348,7 @@ Complete Play Store submission instructions are available in `STORE_LISTING.md`,
    - Upload to Google Play Console
 
 4. **Submit**:
-   - Upload APK or AAB to Google Play Console
+   - Upload the signed AAB to Google Play Console
    - Complete store listing
    - Submit for review
 

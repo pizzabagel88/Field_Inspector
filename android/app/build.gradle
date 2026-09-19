@@ -23,7 +23,7 @@ if (flutterVersionName == null) {
 }
 
 def keystoreProperties = new Properties()
-def keystorePropertiesFile = rootProject.file('../key.properties')
+def keystorePropertiesFile = rootProject.file('key.properties')
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
@@ -60,7 +60,7 @@ android {
             if (keystoreProperties['keyAlias'] != null) {
                 keyAlias keystoreProperties['keyAlias']
                 keyPassword keystoreProperties['keyPassword']
-                storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+                storeFile keystoreProperties['storeFile'] ? rootProject.file(keystoreProperties['storeFile']) : null
                 storePassword keystoreProperties['storePassword']
             }
         }
@@ -68,11 +68,7 @@ android {
 
     buildTypes {
         release {
-            if (keystoreProperties['keyAlias'] != null) {
-                signingConfig signingConfigs.release
-            } else {
-                signingConfig signingConfigs.debug
-            }
+            signingConfig signingConfigs.release
         }
         debug {
             signingConfig signingConfigs.debug
@@ -85,3 +81,16 @@ flutter {
 }
 
 dependencies {}
+
+gradle.taskGraph.whenReady { graph ->
+    if (graph.allTasks.any { it.project == project && it.name.toLowerCase().contains('release') }) {
+        def requiredKeys = ['keyAlias', 'keyPassword', 'storeFile', 'storePassword']
+        def missingKeys = requiredKeys.findAll { !keystoreProperties[it] }
+        if (!missingKeys.isEmpty()) {
+            throw new GradleException("Release signing is not configured. Missing android/key.properties values: ${missingKeys.join(', ')}")
+        }
+        if (!rootProject.file(keystoreProperties['storeFile']).isFile()) {
+            throw new GradleException("Release signing keystore not found: ${keystoreProperties['storeFile']}")
+        }
+    }
+}

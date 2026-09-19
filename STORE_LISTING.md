@@ -5,7 +5,7 @@
 **App Name**: Field Inspector  
 **Package Name**: com.fieldinspector.app  
 **Category**: Tools / Photography  
-**Content Rating**: Everyone
+**Content Rating**: Complete the Play Console questionnaire; do not assume a rating.
 
 ---
 
@@ -16,7 +16,7 @@ Professional field inspection camera with GPS, compass & embedded annotations
 
 ## Full Description (4000 characters max)
 
-Field Inspector is a professional camera app designed for field work, documentation, and project tracking. Inspired by industry standards like Conota Camera, this app provides real-time camera annotations that are permanently embedded in saved photos.
+Field Inspector is a camera app designed for field work, documentation, and project tracking. It provides real-time camera annotations that are permanently embedded in saved photos.
 
 ## 🌟 Key Features
 
@@ -55,7 +55,7 @@ Field Inspector is a professional camera app designed for field work, documentat
 
 ## 🔐 Privacy & Security
 
-- **No Data Collection**: All data stored locally on your device
+- **No App Server or Analytics**: Photos and settings remain on the device
 - **No Internet Required**: Core functionality works offline
 - **Local Storage Only**: Photos saved to device gallery
 - **No Analytics**: No tracking or data transmission
@@ -65,8 +65,7 @@ Field Inspector is a professional camera app designed for field work, documentat
 
 - **Minimum Android Version**: Android 8.0 (API 26)
 - **Target Android Version**: Android 16 (API 36)
-- **Permissions**: Camera, Location (Fine/Coarse), Storage, Gallery Access
-- **File Size**: ~49MB
+- **Permissions**: Camera; optional foreground Location (Fine/Coarse)
 - **Offline Capability**: Yes
 
 ## 💡 Use Cases
@@ -109,7 +108,7 @@ Field Inspector is built with professionals in mind who need reliable, accurate 
 
 ## Screenshots Required
 
-Provide at least 2 screenshots (max 8):
+Capture real screenshots from the installed app. Play Console shows current quantity and size requirements for each device type. Suggested views:
 1. **Camera Screen**: Show camera preview with annotation overlay
 2. **Settings Screen**: Show annotation configuration options
 3. **Gallery View**: Show saved photos in gallery
@@ -121,7 +120,7 @@ Provide at least 2 screenshots (max 8):
 - Resolution: 1080x1920 (phone), 1920x1080 (tablet)
 - Format: PNG or JPG
 - No device frames
-- No status bar
+- Show the real app; avoid private real-world locations or faces
 - Show actual app functionality
 
 ---
@@ -147,24 +146,13 @@ Create a promotional banner showing:
 
 ## Privacy Policy URL
 
-Before publishing, you must provide a privacy policy URL. Since this app:
-- Does not collect personal data
-- Does not transmit data
-- Stores everything locally
-- Requires no account
-
-You can use a simple privacy policy stating:
-- No data collection
-- Local storage only
-- Required permissions explained
-- Contact information
+The drafted policy is `docs/privacy.html`. Publish it through GitHub Pages at `https://pizzabagel88.github.io/Field_Inspector/privacy.html` and verify the link works before using it in Play Console. The app's Settings screen links to this address.
 
 ---
 
 ## Content Rating
 
-**Rating**: Everyone  
-**Reasons**: No violence, no profanity, no user-generated content, no restricted content
+Complete the Play Console content-rating questionnaire based on the finished app. Do not select a rating from this draft.
 
 ---
 
@@ -175,17 +163,13 @@ You can use a simple privacy policy stating:
 
 ---
 
-## Keywords (max 100 characters)
-field inspector, camera, GPS, annotations, documentation, survey, construction, inspection
-
----
-
 ## Contact Information
 
-**Developer Name**: [Your Name/Organization]  
-**Email**: [Your support email]  
-**Website**: [Your website - optional]  
-**Privacy Policy**: [URL to privacy policy]
+**Developer Name**: pizzabagel
+
+**Email**: booksforgenz-6855@pages.plusgoogle.com
+
+**Privacy Policy**: https://pizzabagel88.github.io/Field_Inspector/privacy.html (after enabling GitHub Pages)
 
 ---
 
@@ -210,7 +194,7 @@ Before submitting, test on:
 - [ ] Various screen sizes (phone, tablet)
 - [ ] Camera permissions
 - [ ] Location permissions
-- [ ] Storage permissions
+- [ ] Permission-denial flows and no-location behavior
 - [ ] Gallery integration
 - [ ] Annotation embedding
 - [ ] Photo saving
@@ -255,7 +239,9 @@ Consider adding in future versions:
 - [ ] Keywords optimized
 - [ ] Contact information provided
 - [ ] Signing key generated and configured
-- [ ] Release APK/AAB built successfully
+- [ ] Signed release AAB built and uploaded to internal testing
+- [ ] Data safety form and privacy policy completed
+- [ ] Twelve testers opted into closed testing for 14 continuous days
 - [ ] Tested on multiple devices
 - [ ] All permissions documented
 - [ ] Store listing reviewed for accuracy
@@ -264,9 +250,9 @@ Consider adding in future versions:
 
 ## Notes
 
-- Current build uses debug signing (you'll need to generate keystore for production)
-- AAB build has debug symbol stripping issues - APK works fine for distribution
-- Consider using APK for initial release, troubleshoot AAB for Play Store later
+- Release builds require configured signing; they do not fall back to the debug key.
+- Flutter's post-build AAB validation on this Windows machine currently requires Android SDK Command-line Tools. See `PLAY_RELEASE.md`.
+- New Google Play apps require a signed AAB. An APK is not a substitute.
 - Keep keystore file secure and backed up
 - Never lose keystore file - you cannot update app without it
 

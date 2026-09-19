@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/annotation_settings.dart';
@@ -11,6 +12,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  static const _platform = MethodChannel('com.example.field_inspector/gallery');
   final TextEditingController _projectNameController = TextEditingController();
   final TextEditingController _inspectorNameController =
       TextEditingController();
@@ -48,6 +50,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _saveAnnotationSettings() async {
     final preferences = await SharedPreferences.getInstance();
     await AnnotationSettings(_annotationItems).save(preferences);
+  }
+
+  Future<void> _openPrivacyPolicy() async {
+    try {
+      await _platform.invokeMethod<void>('openPrivacyPolicy');
+    } on PlatformException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open the privacy policy')),
+        );
+      }
+    }
+  }
+
+  Future<void> _openTipPage() async {
+    try {
+      await _platform.invokeMethod<void>('openTipPage');
+    } on PlatformException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open the tip page')),
+        );
+      }
+    }
   }
 
   @override
@@ -204,6 +230,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 24),
+            ListTile(
+              leading: const Icon(Icons.privacy_tip_outlined),
+              title: const Text('Privacy policy'),
+              subtitle: const Text('How Field Inspector handles your data'),
+              onTap: _openPrivacyPolicy,
+            ),
+            ListTile(
+              leading: const Icon(Icons.favorite_outline),
+              title: const Text('Tip the developer'),
+              subtitle:
+                  const Text('Optional support via PayPal; unlocks nothing'),
+              onTap: _openTipPage,
+            ),
+            const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [

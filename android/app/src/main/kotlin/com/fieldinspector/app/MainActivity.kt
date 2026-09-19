@@ -43,6 +43,22 @@ class MainActivity: FlutterActivity() {
             } else if (call.method == "openGallery") {
                 openGalleryApp()
                 result.success(null)
+            } else if (call.method == "openPrivacyPolicy") {
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://pizzabagel88.github.io/Field_Inspector/privacy.html"))
+                    startActivity(intent)
+                    result.success(null)
+                } catch (e: Exception) {
+                    result.error("OPEN_URL_ERROR", "Could not open privacy policy", null)
+                }
+            } else if (call.method == "openTipPage") {
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://paypal.me/pizzabagel88"))
+                    startActivity(intent)
+                    result.success(null)
+                } catch (e: Exception) {
+                    result.error("OPEN_URL_ERROR", "Could not open tip page", null)
+                }
             } else {
                 result.notImplemented()
             }
@@ -177,7 +193,7 @@ class MainActivity: FlutterActivity() {
 
         // Draw left annotations
         var yPosition = imageHeight - bottomMargin
-        for (annotation in annotations) {
+        for (annotation in annotations.asReversed()) {
             val placement = annotation["placement"] as? String
             val text = annotation["text"] as? String ?: ""
             
@@ -189,7 +205,7 @@ class MainActivity: FlutterActivity() {
 
         // Draw right annotations
         yPosition = imageHeight - bottomMargin
-        for (annotation in annotations) {
+        for (annotation in annotations.asReversed()) {
             val placement = annotation["placement"] as? String
             val text = annotation["text"] as? String ?: ""
             

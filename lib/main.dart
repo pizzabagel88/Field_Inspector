@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'screens/camera_screen.dart';
 import 'screens/settings_screen.dart';
 
@@ -32,32 +31,21 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
-
-  final List<Widget> _screens = [
-    const CameraScreen(),
-    const SettingsScreen(),
-  ];
-
-  Future<void> _requestPermissions() async {
-    await Permission.camera.request();
-    await Permission.location.request();
-    await Permission.storage.request();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _requestPermissions();
-  }
+  int _cameraRevision = 0;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_selectedIndex],
+      body: _selectedIndex == 0
+          ? CameraScreen(key: ValueKey(_cameraRevision))
+          : const SettingsScreen(),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) {
           setState(() {
+            if (index == 0 && _selectedIndex != 0) {
+              _cameraRevision++;
+            }
             _selectedIndex = index;
           });
         },

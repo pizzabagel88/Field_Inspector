@@ -39,6 +39,8 @@ class _CameraScreenState extends State<CameraScreen> {
   StreamSubscription<MagnetometerEvent>? _magnetometerSubscription;
   List<double>? _magnetometerValues;
   bool _isInitialized = false;
+  bool _isTakingPicture = false;
+  String? _cameraError;
   double _zoomLevel = 1.0;
   double _minZoomLevel = 1.0;
   double _maxZoomLevel = 1.0;
@@ -50,7 +52,6 @@ class _CameraScreenState extends State<CameraScreen> {
     super.initState();
     _initializeCamera();
     _loadSettings();
-    _startLocationUpdates();
     _startCompassUpdates();
   }
 
@@ -73,14 +74,19 @@ class _CameraScreenState extends State<CameraScreen> {
         if (mounted) {
           setState(() {
             _isInitialized = true;
+            _cameraError = null;
           });
         }
+      } else if (mounted) {
+        setState(() => _cameraError = 'No camera was found on this device.');
       }
     } catch (e) {
       print('Error initializing camera: $e');
       if (mounted) {
         setState(() {
           _isInitialized = false;
+          _cameraError =
+              'Camera unavailable. Check camera permission and try again.';
         });
       }
     }
@@ -97,9 +103,14 @@ class _CameraScreenState extends State<CameraScreen> {
       _photoSequence = prefs.getInt('photo_sequence') ?? 1;
       _annotationItems = annotationSettings.items;
     });
+    if (annotationSettings.items.any((item) =>
+        item.placement != AnnotationPlacement.disabled &&
+        (item.id == 'coordinates' || item.id == 'elevation'))) {
+      _startLocationUpdates();
+    }
   }
 
-  void _startLocationUpdates() async {
+  Future<void> _startLocationUpdates() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       return;
@@ -107,6 +118,28 @@ class _CameraScreenState extends State<CameraScreen> {
 
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
+      if (!mounted) return;
+      final shouldRequest = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Use your location?'),
+              content: const Text(
+                'Field Inspector uses your location to show GPS coordinates and elevation on the camera preview and saved photos. Location stays on your device and is only used while the app is open.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Not now'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Continue'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!shouldRequest || !mounted) return;
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
         return;
@@ -274,7 +307,12 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _takePicture() async {
-    if (_controller == null || !_controller!.value.isInitialized) return;
+    if (_isTakingPicture ||
+        _controller == null ||
+        !_controller!.value.isInitialized) {
+      return;
+    }
+    _isTakingPicture = true;
 
     try {
       final image = await _controller!.takePicture();
@@ -304,27 +342,31 @@ class _CameraScreenState extends State<CameraScreen> {
           SnackBar(content: Text('Error saving photo: $e')),
         );
       }
+    } finally {
+      _isTakingPicture = false;
     }
   }
 
   Future<void> _saveToGallery(String imagePath) async {
     try {
       // Get annotation values to embed in the image
-      final annotations = _getAnnotationValues().map((a) => {
-        'text': a.text,
-        'placement': a.placement.toString().split('.').last,
-      }).toList();
+      final annotations = _getAnnotationValues()
+          .map((a) => {
+                'text': a.text,
+                'placement': a.placement.toString().split('.').last,
+              })
+          .toList();
 
       // Use Android MediaStore to properly save to gallery with annotations
       final String? savedPath = await platform.invokeMethod('saveToGallery', {
         'imagePath': imagePath,
         'annotations': annotations,
       });
-      
+
       if (savedPath == null) {
         throw Exception('Failed to save image to gallery');
       }
-      
+
       print('Image saved to gallery: $savedPath');
     } catch (e) {
       print('Error saving to gallery: $e');
@@ -495,7 +537,8 @@ class _CameraScreenState extends State<CameraScreen> {
                                   height: 56,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white, width: 2),
+                                    border: Border.all(
+                                        color: Colors.white, width: 2),
                                     color: Colors.transparent,
                                   ),
                                   child: const Icon(
@@ -514,7 +557,8 @@ class _CameraScreenState extends State<CameraScreen> {
                                   height: 70,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white, width: 4),
+                                    border: Border.all(
+                                        color: Colors.white, width: 4),
                                     color: Colors.transparent,
                                   ),
                                   child: Container(
@@ -535,13 +579,24 @@ class _CameraScreenState extends State<CameraScreen> {
                 ),
               ],
             )
-          : const Center(
+          : Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Initializing camera...'),
+                  if (_cameraError == null) ...[
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    const Text('Initializing camera...'),
+                  ] else ...[
+                    const Icon(Icons.camera_alt_outlined, size: 48),
+                    const SizedBox(height: 16),
+                    Text(_cameraError!, textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: _initializeCamera,
+                      child: const Text('Try again'),
+                    ),
+                  ],
                 ],
               ),
             ),
